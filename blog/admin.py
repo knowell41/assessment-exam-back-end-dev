@@ -11,7 +11,7 @@ class AuthorAdmin(admin.ModelAdmin):
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
-    list_display = ("title", "author", "published_date", "status", "active")
+    list_display = ("id", "title", "author", "published_date", "status", "active")
     list_filter = ("status", "active", "published_date")
     search_fields = ("title", "content")
     date_hierarchy = "published_date"
