@@ -250,9 +250,14 @@ class AddCommentAPIView(APIView):
             post = Post.objects.get(id=post_id)
         except Post.DoesNotExist:
             return Response(
-                {"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND
+                {"error": "Post not found."}, status=status.HTTP_403_FORBIDDEN
             )
 
+        if post.active is False:
+            return Response(
+                {"error": "Cannot comment on an inactive post."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         data = {"post": post, "content": content}
         if request.user and request.user.is_authenticated:
             data["user"] = request.user
