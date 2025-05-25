@@ -36,6 +36,23 @@ class PostMinimalSerializer(serializers.ModelSerializer):
         return obj.author.name if obj.author else "Unknown Author"
 
 
+class PostWithCommentsSerializer(serializers.ModelSerializer):
+    comments = serializers.SerializerMethodField()
+    author_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Post
+        fields = ["id", "title", "content", "author_name", "published_date", "comments"]
+        read_only_fields = ["id", "published_date"]
+
+    def get_comments(self, obj):
+        coments_queryset = Comment.objects.filter(post=obj)
+        return CommentSerializer(coments_queryset, many=True).data
+
+    def get_author_name(self, obj):
+        return obj.author.name if obj.author else "Unknown Author"
+
+
 class PostCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
@@ -62,8 +79,13 @@ class PostCreateSerializer(serializers.ModelSerializer):
 
 
 class CommentSerializer(serializers.ModelSerializer):
-    post = PostSerializer(read_only=True)
+    user = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
-        fields = ["id", "post", "user", "content", "created"]
+        fields = ["id", "user", "content", "created"]
+
+    def get_user(self, obj):
+        if obj.user:
+            return obj.user.username
+        return None

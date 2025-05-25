@@ -1,15 +1,21 @@
 from rest_framework import status
+from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from blog.serializers import (
-    CommentSerializer,
+    PostWithCommentsSerializer,
     PostCreateSerializer,
     PostMinimalSerializer,
+    CommentSerializer,
 )
 from blog.models import Author, Post, Comment
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-from rest_framework.permissions import IsAuthenticatedOrReadOnly
+from rest_framework.permissions import (
+    IsAuthenticatedOrReadOnly,
+    AllowAny,
+    IsAuthenticated,
+)
 
 
 class PostViewSet(ModelViewSet):
@@ -114,7 +120,7 @@ class PostViewSet(ModelViewSet):
         Retrieve a single post by ID.
         """
         instance = self.get_object()
-        serializer = self.get_serializer(instance)
+        serializer = PostWithCommentsSerializer(instance, context={"request": request})
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
@@ -199,3 +205,110 @@ class PostViewSet(ModelViewSet):
         instance = self.get_object()
         self.perform_destroy(instance)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class AddCommentAPIView(APIView):
+    """
+    A view to add a comment to a post.
+    """
+
+    permission_classes = [AllowAny]
+
+    @swagger_auto_schema(
+        operation_summary="Add a comment to a post",
+        operation_description="Add a comment to a post by providing the post ID and comment content.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                "content": openapi.Schema(
+                    type=openapi.TYPE_STRING, description="Comment content"
+                ),
+            },
+            required=["content"],
+        ),
+        responses={
+            201: openapi.Response("Comment created successfully"),
+            400: "Bad request.",
+            404: "Post not found.",
+            500: "Internal server error.",
+        },
+        tags=["Comments"],
+    )
+    def post(self, request, **kwargs):
+        """
+        Add a comment to a post.
+        """
+        post_id = kwargs.get("post_id")
+        content = request.data.get("content")
+
+        if not content:
+            return Response(
+                {"error": "Content is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            post = Post.objects.get(id=post_id)
+        except Post.DoesNotExist:
+            return Response(
+                {"error": "Post not found."}, status=status.HTTP_404_NOT_FOUND
+            )
+
+        data = {"post": post, "content": content}
+        if request.user and request.user.is_authenticated:
+            data["user"] = request.user
+
+        new_comment = Comment.objects.create(**data)
+        serializer = CommentSerializer(new_comment)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+class RemoveCommentAPIView(APIView):
+    """
+    A view to remove a comment from a post.
+    Only the author of the comment or the post can delete the comment.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="Remove a comment from a post",
+        operation_description="Remove a comment from a post by providing the post ID and comment ID.",
+        responses={
+            204: "Comment deleted successfully",
+            404: "Post or comment not found.",
+            500: "Internal server error.",
+        },
+        tags=["Comments"],
+    )
+    def delete(self, request, **kwargs):
+        """
+        Remove a comment from a post.
+        """
+        post_id = kwargs.get("post_id")
+        comment_id = kwargs.get("comment_id")
+
+        try:
+            post = Post.objects.get(id=post_id)
+            comment = Comment.objects.get(id=comment_id, post=post)
+        except (Post.DoesNotExist, Comment.DoesNotExist):
+            return Response(
+                {"error": "Post or comment not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if self.validate(post, comment) is False:
+            return Response(
+                {"error": "You are not allowed to delete this comment."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        comment.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def validate(self, post: Post, comment: Comment) -> bool:
+        """
+        Validate if the user is allowed to delete the comment.
+        Only the author of the comment or the post can delete the comment.
+        """
+        if comment.user == self.request.user or post.author.user == self.request.user:
+            return True
+        return False
