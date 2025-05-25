@@ -1,0 +1,34 @@
+# Use postgres/example user/password credentials
+
+services:
+  db:
+    image: postgres
+    restart: always
+    # set shared memory limit when using docker compose
+    shm_size: 128mb
+    environment:
+      POSTGRES_PASSWORD: dummypassword
+      POSTGRES_USER: root
+      POSTGRES_DB: postgres
+    ports:
+      - 5432:5432
+
+  web:
+    build: .
+    command: ./entrypoint.sh
+    ports:
+      - 8000:8000
+    depends_on:
+      - db
+    environment:
+      SECRET_KEY: "%u(uu$wuet3(qr52b0pr@8=klk&mo(1nraenupooi0)q148gfi"
+      POSTGRES_PASSWORD: dummypassword
+      POSTGRES_USER: root
+      POSTGRES_DB: postgres
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      USE_POSTGRES: "True"
+      ALLOWED_HOSTS: "localhost"
+      DJANGO_SUPERUSER_USERNAME: dev_admin
+      DJANGO_SUPERUSER_EMAIL: dev_admin@example.com
+      DJANGO_SUPERUSER_PASSWORD: dummypassword
