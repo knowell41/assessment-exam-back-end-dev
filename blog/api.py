@@ -2,10 +2,9 @@ from rest_framework import status
 from rest_framework.viewsets import ModelViewSet
 from rest_framework.response import Response
 from blog.serializers import (
-    AuthorSerializer,
-    PostSerializer,
     CommentSerializer,
     PostCreateSerializer,
+    PostMinimalSerializer,
 )
 from blog.models import Author, Post, Comment
 from drf_yasg.utils import swagger_auto_schema
@@ -19,14 +18,14 @@ class PostViewSet(ModelViewSet):
     """
 
     queryset = Post.objects.all()
-    serializer_class = PostSerializer
+    serializer_class = PostMinimalSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     @swagger_auto_schema(
         operation_summary="List all posts",
         operation_description="Retrieve a list of all posts in the system.",
         responses={
-            200: PostSerializer(many=True),
+            200: PostMinimalSerializer(many=True),
             400: "Bad request.",
             500: "Internal server error.",
         },
@@ -54,10 +53,48 @@ class PostViewSet(ModelViewSet):
                 enum=["draft", "published"],
                 required=False,
             ),
+            openapi.Parameter(
+                "title",
+                openapi.IN_QUERY,
+                description="Filter posts by title (case-insensitive substring match)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "content",
+                openapi.IN_QUERY,
+                description="Filter posts by content (case-insensitive substring match)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "author_name",
+                openapi.IN_QUERY,
+                description="Filter posts by author's name (case-insensitive substring match)",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
         ],
     )
     def list(self, request, *args, **kwargs):
         page_size = request.query_params.get("page_size")
+        active_param = request.query_params.get("active")
+        if active_param is not None:
+            is_active = active_param == "true"
+        else:
+            is_active = True
+        self.queryset = self.queryset.filter(active=is_active)
+        title_param = request.query_params.get("title")
+        if title_param:
+            self.queryset = self.queryset.filter(title__icontains=title_param)
+        content_param = request.query_params.get("content")
+        if content_param:
+            self.queryset = self.queryset.filter(content__icontains=content_param)
+        author_name_param = request.query_params.get("author_name")
+        if author_name_param:
+            self.queryset = self.queryset.filter(
+                author__name__icontains=author_name_param
+            )
         if page_size:
             self.paginator.page_size = int(page_size)
         return super().list(request, *args, **kwargs)
@@ -66,7 +103,7 @@ class PostViewSet(ModelViewSet):
         operation_summary="Retrieve a post by ID",
         operation_description="Retrieve a single post by its ID.",
         responses={
-            200: PostSerializer,
+            200: PostMinimalSerializer,
             404: "Not found.",
             500: "Internal server error.",
         },
@@ -85,7 +122,7 @@ class PostViewSet(ModelViewSet):
         operation_description="Create a new post with the provided data.",
         request_body=PostCreateSerializer,
         responses={
-            201: PostSerializer,
+            201: PostMinimalSerializer,
             400: "Bad request.",
             500: "Internal server error.",
         },
@@ -111,7 +148,7 @@ class PostViewSet(ModelViewSet):
         operation_description="Update an existing post with the provided data.",
         request_body=PostCreateSerializer,
         responses={
-            200: PostSerializer,
+            200: PostMinimalSerializer,
             400: "Bad request.",
             404: "Not found.",
             500: "Internal server error.",
@@ -128,14 +165,14 @@ class PostViewSet(ModelViewSet):
         )
         serializer.is_valid(raise_exception=True)
         self.perform_update(serializer)
-        return Response(PostSerializer(instance).data, status=status.HTTP_200_OK)
+        return Response(PostMinimalSerializer(instance).data, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_summary="Partially update a post",
         operation_description="Partially update a post with the provided data.",
-        request_body=PostSerializer,
+        request_body=PostCreateSerializer,
         responses={
-            200: PostSerializer,
+            200: PostMinimalSerializer,
             400: "Bad request.",
             404: "Not found.",
             500: "Internal server error.",
