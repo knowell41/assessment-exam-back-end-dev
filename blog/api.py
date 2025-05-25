@@ -23,7 +23,7 @@ class PostViewSet(ModelViewSet):
     A viewset for viewing and editing Post instances.
     """
 
-    queryset = Post.objects.all()
+    queryset = Post.objects.all().order_by("-published_date")
     serializer_class = PostMinimalSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -80,6 +80,20 @@ class PostViewSet(ModelViewSet):
                 type=openapi.TYPE_STRING,
                 required=False,
             ),
+            openapi.Parameter(
+                "published_date_start",
+                openapi.IN_QUERY,
+                description="Filter posts by the published date.Example: 2023-01-01",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
+            openapi.Parameter(
+                "published_date_end",
+                openapi.IN_QUERY,
+                description="Filter posts by the published date.Example: 2023-01-01",
+                type=openapi.TYPE_STRING,
+                required=False,
+            ),
         ],
     )
     def list(self, request, *args, **kwargs):
@@ -101,9 +115,33 @@ class PostViewSet(ModelViewSet):
             self.queryset = self.queryset.filter(
                 author__name__icontains=author_name_param
             )
+        published_date_start = request.query_params.get("published_date_start")
+        published_date_end = request.query_params.get("published_date_end")
+
+        if published_date_end:
+            published_date_end = self.to_datetime(published_date_end)
+            self.queryset = self.queryset.filter(published_date__lte=published_date_end)
+        if published_date_start:
+            self.queryset = self.queryset.filter(
+                published_date__gte=published_date_start
+            )
         if page_size:
             self.paginator.page_size = int(page_size)
         return super().list(request, *args, **kwargs)
+
+    def to_datetime(self, date_str):
+        """
+        Convert a date string to a datetime object.
+        """
+        from django.utils import timezone
+        from datetime import datetime
+
+        try:
+            return timezone.make_aware(
+                datetime.strptime(date_str, "%Y-%m-%d")
+            ) + timezone.timedelta(hours=23, minutes=59, seconds=59)
+        except ValueError:
+            return None
 
     @swagger_auto_schema(
         operation_summary="Retrieve a post by ID",

@@ -30,7 +30,7 @@ class PostMinimalSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Post
-        fields = ["id", "title", "content", "published_date", "author_name"]
+        fields = ["id", "title", "content", "published_date", "author_name", "active"]
 
     def get_author_name(self, obj):
         return obj.author.name if obj.author else "Unknown Author"
